@@ -180,7 +180,7 @@ def main() -> None:
                 st.success(f"File ready: {uploaded_file.name}")
 
         if st.session_state.df_path:
-            st.caption(f"Ruta temporal: {Path(st.session_state.df_path).name}")
+            st.caption(f"Temporary path: {Path(st.session_state.df_path).name}")
 
     for message in st.session_state.messages:
         _render_message(message)
