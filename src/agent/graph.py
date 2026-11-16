@@ -88,6 +88,8 @@ def _get_llm_gemini() -> ChatGoogleGenerativeAI:
         model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
         google_api_key=api_key,
         temperature=0,
+        timeout=30,
+        max_retries=1,
     )
 
 def _get_llm_openai() -> ChatOpenAI:

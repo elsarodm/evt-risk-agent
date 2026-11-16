@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 import streamlit as st
+from langchain_google_genai.chat_models import GoogleAPIError
 
 from agent.graph import AgentState, build_graph
 
@@ -73,6 +74,8 @@ def _run_agent(prompt: str, confidence: float) -> None:
     """Run the configured graph and store its returned state in the session."""
     user_message = {"role": "user", "content": prompt}
     st.session_state.messages.append(user_message)
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
     if not st.session_state.df_path:
         st.session_state.messages.append(
@@ -84,7 +87,11 @@ def _run_agent(prompt: str, confidence: float) -> None:
         return
 
     try:
-        result = build_graph().invoke(_state_from_session(prompt, confidence))
+        with st.chat_message("assistant"):
+            with st.status("Thinking..."):
+                result = build_graph().invoke(
+                    _state_from_session(prompt, confidence)
+                )
     except NotImplementedError:
         st.session_state.messages.append(
             {
@@ -92,6 +99,18 @@ def _run_agent(prompt: str, confidence: float) -> None:
                 "content": (
                     "The analysis workflow is not available yet. "
                     "The interface received your data successfully."
+                ),
+            }
+        )
+        return
+    except GoogleAPIError as error:
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": (
+                    "Gemini no está disponible temporalmente. "
+                    "Se ha reintentado la solicitud; inténtalo de nuevo en unos momentos. "
+                    f"Detalle: {error}"
                 ),
             }
         )
