@@ -90,6 +90,59 @@ class SupervisorDecision(BaseModel):
     plot: bool = Field(description="Whether the user requested a diagnostic plot.")
 
 
+class EmpiricalParameters(BaseModel):
+    """Parameters used by the empirical risk method."""
+
+    alpha: float
+    plot: bool = False
+
+
+class POTParameters(BaseModel):
+    """Parameters used by the POT method."""
+
+    alpha: float
+    threshold_quantile: float
+    plot: bool = False
+
+
+class BlockParameters(BaseModel):
+    """Parameters used by the block maxima method."""
+
+    block_size: int | None = None
+    block_count: int | None = None
+    plot: bool = False
+
+
+MethodParameters = EmpiricalParameters | POTParameters | BlockParameters
+
+
+def _method_parameters(
+    intent: str, parameters: dict[str, Any]
+) -> MethodParameters:
+    """Normalize supervisor parameters to the selected method."""
+    if intent == "pot":
+        return POTParameters(
+            alpha=parameters["alpha"],
+            threshold_quantile=parameters.get("threshold_quantile", 0.90),
+            plot=parameters.get("plot", False),
+        )
+    if intent == "block":
+        block_count = parameters.get("block_count")
+        return BlockParameters(
+            block_count=int(block_count) if block_count is not None else None,
+            block_size=(
+                None
+                if block_count is not None
+                else max(2, int(parameters.get("block_size", 10)))
+            ),
+            plot=parameters.get("plot", False),
+        )
+    return EmpiricalParameters(
+        alpha=parameters["alpha"],
+        plot=parameters.get("plot", False),
+    )
+
+
 def _get_llm() -> ChatOpenAI:
     """Create the configured OpenAI chat model once per graph process."""
     load_dotenv()
@@ -122,6 +175,7 @@ def _data_agent(state: AgentState) -> dict[str, Any]:
         raise ValueError("A historical CSV file is required before running an analysis.")
     return {
         "_phase": "data",
+        "raw_results": {},
         "_tool_requests": [
             {"name": "load_and_clean_csv", "arguments": {"csv_path": csv_path}},
         ]
@@ -132,14 +186,13 @@ def _quantitative_agent(state: AgentState) -> dict[str, Any]:
     """Schedule the requested statistical calculation."""
     intent = state.get("_intent", "empirical")
     parameters = state.get("_parameters", {})
+    method_parameters = _method_parameters(intent, parameters)
     if state.get("_dataframe") is None:
         raise RuntimeError("The data agent did not produce a cleaned DataFrame.")
 
-    if intent == "pot":
-        confidence = float(parameters["alpha"])
-        threshold_quantile = float(
-            parameters.get("threshold_quantile", 0.90)
-        )
+    if isinstance(method_parameters, POTParameters):
+        confidence = method_parameters.alpha
+        threshold_quantile = method_parameters.threshold_quantile
         if threshold_quantile >= confidence:
             threshold_quantile = confidence * 0.90
         request = {
@@ -149,13 +202,11 @@ def _quantitative_agent(state: AgentState) -> dict[str, Any]:
                 "threshold_quantile": threshold_quantile,
             },
         }
-    elif intent == "block":
-        block_count = parameters.get("block_count")
-        if block_count is not None:
-            request_arguments = {"block_count": int(block_count)}
+    elif isinstance(method_parameters, BlockParameters):
+        if method_parameters.block_count is not None:
+            request_arguments = {"block_count": method_parameters.block_count}
         else:
-            block_size = max(2, int(parameters.get("block_size", 10)))
-            request_arguments = {"block_size": block_size}
+            request_arguments = {"block_size": method_parameters.block_size}
         request = {
             "name": "apply_block_maxima",
             "arguments": request_arguments,
@@ -163,7 +214,7 @@ def _quantitative_agent(state: AgentState) -> dict[str, Any]:
     else:
         request = {
             "name": "calculate_empirical_risk",
-            "arguments": {"alpha": parameters["alpha"]},
+            "arguments": {"alpha": method_parameters.alpha},
         }
     return {
         "_phase": "quantitative",
@@ -227,21 +278,23 @@ def _tools_node(state: AgentState) -> dict[str, Any]:
 
 def _report_agent(state: AgentState) -> dict[str, Any]:
     """Ask the LLM to write the business-facing report."""
+    method = state.get("_intent", "empirical")
+    parameters = _method_parameters(
+        method, state.get("_parameters", {})
+    ).model_dump(exclude_none=True)
+    report_context = json.dumps(
+        {
+            "method": method,
+            "parameters": parameters,
+            "results": state.get("raw_results", {}),
+            "plot_path": state.get("plot_path", ""),
+        },
+        default=str,
+    )
     report_response = _get_llm().invoke(
         [
             SystemMessage(content=REPORT_AGENT_PROMPT),
-            *_conversation_messages(state),
-            HumanMessage(
-                content=json.dumps(
-                    {
-                        "method": state.get("_intent", "empirical"),
-                        "parameters": state.get("_parameters", {}),
-                        "results": state.get("raw_results", {}),
-                        "plot_path": state.get("plot_path", ""),
-                    },
-                    default=str,
-                )
-            ),
+            HumanMessage(content=report_context),
         ]
     )
     report = report_response.content
