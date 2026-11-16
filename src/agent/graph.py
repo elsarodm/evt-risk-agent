@@ -109,7 +109,6 @@ def _data_agent(state: AgentState) -> dict[str, Any]:
         "_phase": "data",
         "_tool_requests": [
             {"name": "load_and_clean_csv", "arguments": {"csv_path": csv_path}},
-            {"name": "calculate_loss_vector", "arguments": {}},
         ]
     }
 
@@ -118,8 +117,8 @@ def _quantitative_agent(state: AgentState) -> dict[str, Any]:
     """Schedule the requested statistical calculation."""
     intent = state.get("_intent", "empirical")
     parameters = state.get("_parameters", {})
-    if state.get("_losses") is None:
-        raise RuntimeError("The data agent did not produce a loss vector.")
+    if state.get("_dataframe") is None:
+        raise RuntimeError("The data agent did not produce a cleaned DataFrame.")
 
     if intent == "pot":
         request = {
@@ -139,7 +138,13 @@ def _quantitative_agent(state: AgentState) -> dict[str, Any]:
             "name": "calculate_empirical_risk",
             "arguments": {"alpha": parameters["alpha"]},
         }
-    return {"_phase": "quantitative", "_tool_requests": [request]}
+    return {
+        "_phase": "quantitative",
+        "_tool_requests": [
+            {"name": "calculate_loss_vector", "arguments": {}},
+            request,
+        ],
+    }
 
 
 def _tools_node(state: AgentState) -> dict[str, Any]:
