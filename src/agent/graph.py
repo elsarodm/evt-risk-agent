@@ -12,7 +12,6 @@ from dotenv import load_dotenv
 from langgraph.graph import END, START, StateGraph
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
 from . import tools
@@ -64,35 +63,34 @@ class SupervisorDecision(BaseModel):
         ),
     )
     threshold_quantile: float = Field(
+        default=0.90,
         gt=0,
         lt=1,
-        description="POT threshold quantile as a decimal, normally 0.95.",
+        description=(
+            "POT threshold quantile as a decimal. Use 0.90 by default "
+            "and always keep it strictly below alpha."
+        ),
     )
     block_size: int = Field(
-        gt=0,
-        description="Number of observations per block for block maxima.",
+        default=10,
+        ge=2,
+        description=(
+            "Number of observations per block for block maxima. "
+            "Use at least 2; default to 10 when the user does not specify it."
+        ),
+    )
+    block_count: int | None = Field(
+        default=None,
+        ge=3,
+        description=(
+            "Requested number of blocks. Set this when the user asks for "
+            "a specific number of blocks."
+        ),
     )
     plot: bool = Field(description="Whether the user requested a diagnostic plot.")
 
 
-@lru_cache(maxsize=1)
-def _get_llm_gemini() -> ChatGoogleGenerativeAI:
-    """Create the configured Gemini model once per graph process."""
-    load_dotenv()
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "Set GEMINI_API_KEY or GOOGLE_API_KEY before running the agent."
-        )
-    return ChatGoogleGenerativeAI(
-        model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
-        google_api_key=api_key,
-        temperature=0,
-        timeout=30,
-        max_retries=1,
-    )
-
-def _get_llm_openai() -> ChatOpenAI:
+def _get_llm() -> ChatOpenAI:
     """Create the configured OpenAI chat model once per graph process."""
     load_dotenv()
     return ChatOpenAI(
@@ -103,7 +101,7 @@ def _get_llm_openai() -> ChatOpenAI:
 
 def _supervisor(state: AgentState) -> dict[str, Any]:
     """Ask the LLM to classify the request and extract its parameters."""
-    decision = _get_llm_gemini().with_structured_output(SupervisorDecision).invoke(
+    decision = _get_llm().with_structured_output(SupervisorDecision).invoke(
         [
             SystemMessage(content=SUPERVISOR_PROMPT),
             *_conversation_messages(state),
@@ -138,17 +136,29 @@ def _quantitative_agent(state: AgentState) -> dict[str, Any]:
         raise RuntimeError("The data agent did not produce a cleaned DataFrame.")
 
     if intent == "pot":
+        confidence = float(parameters["alpha"])
+        threshold_quantile = float(
+            parameters.get("threshold_quantile", 0.90)
+        )
+        if threshold_quantile >= confidence:
+            threshold_quantile = confidence * 0.90
         request = {
             "name": "apply_pot_method",
             "arguments": {
-                "alpha": parameters["alpha"],
-                "threshold_quantile": parameters["threshold_quantile"],
+                "alpha": confidence,
+                "threshold_quantile": threshold_quantile,
             },
         }
     elif intent == "block":
+        block_count = parameters.get("block_count")
+        if block_count is not None:
+            request_arguments = {"block_count": int(block_count)}
+        else:
+            block_size = max(2, int(parameters.get("block_size", 10)))
+            request_arguments = {"block_size": block_size}
         request = {
             "name": "apply_block_maxima",
-            "arguments": {"block_size": parameters["block_size"]},
+            "arguments": request_arguments,
         }
     else:
         request = {
@@ -217,7 +227,7 @@ def _tools_node(state: AgentState) -> dict[str, Any]:
 
 def _report_agent(state: AgentState) -> dict[str, Any]:
     """Ask the LLM to write the business-facing report."""
-    report_response = _get_llm_gemini().invoke(
+    report_response = _get_llm().invoke(
         [
             SystemMessage(content=REPORT_AGENT_PROMPT),
             *_conversation_messages(state),
