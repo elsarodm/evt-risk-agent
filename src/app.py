@@ -186,7 +186,7 @@ def main() -> None:
         _render_message(message)
 
     prompt = st.chat_input(
-        "Ask for an analysis, for example: calculate empirical VaR and CVaR at 99%"
+        "Ask for an analysis"
     )
     if prompt:
         _run_agent(prompt, confidence)
