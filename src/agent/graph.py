@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from langgraph.graph import END, START, StateGraph
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
 from . import tools
@@ -75,7 +76,21 @@ class SupervisorDecision(BaseModel):
 
 
 @lru_cache(maxsize=1)
-def _get_llm() -> ChatOpenAI:
+def _get_llm_gemini() -> ChatGoogleGenerativeAI:
+    """Create the configured Gemini model once per graph process."""
+    load_dotenv()
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "Set GEMINI_API_KEY or GOOGLE_API_KEY before running the agent."
+        )
+    return ChatGoogleGenerativeAI(
+        model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+        google_api_key=api_key,
+        temperature=0,
+    )
+
+def _get_llm_openai() -> ChatOpenAI:
     """Create the configured OpenAI chat model once per graph process."""
     load_dotenv()
     return ChatOpenAI(
@@ -86,7 +101,7 @@ def _get_llm() -> ChatOpenAI:
 
 def _supervisor(state: AgentState) -> dict[str, Any]:
     """Ask the LLM to classify the request and extract its parameters."""
-    decision = _get_llm().with_structured_output(SupervisorDecision).invoke(
+    decision = _get_llm_gemini().with_structured_output(SupervisorDecision).invoke(
         [
             SystemMessage(content=SUPERVISOR_PROMPT),
             *_conversation_messages(state),
@@ -200,7 +215,7 @@ def _tools_node(state: AgentState) -> dict[str, Any]:
 
 def _report_agent(state: AgentState) -> dict[str, Any]:
     """Ask the LLM to write the business-facing report."""
-    report_response = _get_llm().invoke(
+    report_response = _get_llm_gemini().invoke(
         [
             SystemMessage(content=REPORT_AGENT_PROMPT),
             *_conversation_messages(state),
