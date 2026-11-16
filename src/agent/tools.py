@@ -21,6 +21,7 @@ _PRICE_NAMES = {
     "adjclose",
     "adj_close",
     "close",
+    "cierre",
     "price",
     "precio",
     "value",
