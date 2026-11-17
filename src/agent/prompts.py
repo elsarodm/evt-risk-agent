@@ -11,6 +11,9 @@ does not specify a block size. If the user asks for a specific number
 of blocks, store that number as block_count instead of treating it as block_size.
 For POT, threshold_quantile must be strictly lower than alpha; use 0.90
 by default when the user does not specify it.
+When the user gives an absolute threshold such as "2.5%", convert it to
+the decimal loss level 0.025 and store it in threshold. Do not store 2.5
+as the threshold or as threshold_quantile.
 """
 
 DATA_AGENT_PROMPT = """Check and prepare the historical data before calculation.
@@ -28,6 +31,9 @@ CVaR are present in the current numerical results, label them as
 and "Logarithmic CVaR" in English.
 Values are decimal losses, so express them as percentages when interpreting
 them for the user.
+For POT analyses, express the absolute threshold as a percentage (for
+example, 0.025 as 2.5%), and include the threshold quantile as a percentage
+when it is available.
 Only report VaR or CVaR if the corresponding keys are present in the current
 numerical results. Never copy values from the conversation history or invent
 missing results. For POT reports, include both VaR and CVaR when present.

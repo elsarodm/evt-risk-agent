@@ -175,21 +175,31 @@ def apply_block_maxima(
 
 
 def apply_pot_method(
-    losses: Any, alpha: float, threshold_quantile: float
+    losses: Any, alpha: float, threshold: float | None = None, threshold_quantile: float | None = 0.90,
 ) -> dict[str, float]:
     """Fit a GPD to threshold exceedances and calculate extreme VaR/CVaR."""
     values = _finite_losses(losses)
     confidence = _validate_probability(alpha, "alpha")
-    threshold_level = _validate_probability(
-        threshold_quantile, "threshold_quantile"
-    )
+
+    if threshold is not None:
+        threshold_value = float(threshold)
+        if not np.isfinite(threshold_value) or threshold_value <= 0:
+            raise ValueError("threshold must be a positive finite value.")
+        if threshold_value >= 1:
+            threshold_value /= 100
+
+        threshold_level = float(np.mean(values <= threshold_value))
+
+    else: 
+        threshold_level = _validate_probability(threshold_quantile, "threshold_quantile")
+        threshold_value = float(np.quantile(losses, threshold_level))
+
     if confidence <= threshold_level:
         raise ValueError(
-            "alpha must be greater than threshold_quantile for the POT model."
+            "The threshold quantile must be strictly below alpha."
         )
 
-    threshold = float(np.quantile(values, threshold_level))
-    excesses = values[values > threshold] - threshold
+    excesses = values[values > threshold_value] - threshold_value
     if excesses.size < 3:
         raise ValueError(
             "The POT model needs at least three observations above the threshold."
@@ -206,14 +216,14 @@ def apply_pot_method(
     tail_probability = excesses.size / values.size      # P(L>u) = k/n
     ratio = tail_probability / (1 - confidence)         # P(L>u) / P(L>VaR) = (k/n) / (1-alpha)
     if np.isclose(shape, 0):
-        var = threshold + scale * np.log(ratio)
+        var = threshold_value + scale * np.log(ratio)
     else:
-        var = threshold + scale / shape * (ratio**shape - 1)
-    cvar = var + (scale + shape * (var - threshold)) / (1 - shape)
+        var = threshold_value + scale / shape * (ratio**shape - 1)
+    cvar = var + (scale + shape * (var - threshold_value)) / (1 - shape)
     return {
         "var": float(var),
         "cvar": float(cvar),
-        "threshold": threshold,
+        "threshold": threshold_value,
         "threshold_quantile": threshold_level,
         "xi": shape,
         "beta": scale,
