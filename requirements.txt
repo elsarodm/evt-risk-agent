@@ -1,7 +1,6 @@
 streamlit
 langgraph
 langchain-openai
-langchain-google-genai
 pandas
 numpy
 scipy
