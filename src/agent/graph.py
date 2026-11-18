@@ -144,12 +144,23 @@ def _quantitative_agent(state: AgentState) -> dict[str, Any]:
 
     elif intent == "block":
         if params.get("block_count") is not None:
-            results = tools.apply_block_maxima(losses, block_count=params["block_count"])
+            results = tools.apply_block_maxima(
+                losses, 
+                block_count=params["block_count"],
+                alpha=params["alpha"],
+            )
         else:
-            results = tools.apply_block_maxima(losses, block_size=params.get("block_size", 10))
+            results = tools.apply_block_maxima(
+                losses, 
+                block_size=params.get("block_size", 10),
+                alpha=params["alpha"],
+            )
     
     else:  # empirical
-        results = tools.calculate_empirical_risk(losses, alpha=params["alpha"])
+        results = tools.calculate_empirical_risk(
+            losses, 
+            alpha=params["alpha"]
+        )
     return {
         "raw_results": results,
         "plot_path": plot_path,

@@ -122,21 +122,28 @@ def calculate_loss_vector(df: Any) -> np.ndarray:
 
 
 def calculate_empirical_risk(losses: Any, alpha: float) -> dict[str, float]:
-    """Calculate historical VaR and CVaR at confidence level ``alpha``."""
+    """Calculate historical VaR and AVaR at confidence level ``alpha``."""
     values = _finite_losses(losses)
     confidence = _validate_probability(alpha, "alpha")
     var = float(np.quantile(values, confidence))
     tail = values[values >= var]
     if tail.size == 0:
         raise RuntimeError("Unable to identify observations in the VaR tail.")
-    return {"var": var, "cvar": float(np.mean(tail))}
+    return {
+        "var": var,
+        "avar": float(np.mean(tail)),
+    }
 
 
 def apply_block_maxima(
-    losses: Any, block_size: int | None = None, block_count: int | None = None
+    losses: Any,
+    block_size: int | None = None,
+    block_count: int | None = None,
+    alpha: float = 0.99,
 ) -> dict[str, float]:
-    """Fit a GEV distribution to non-overlapping loss block maxima."""
+    """Fit a GEV distribution and calculate its standard return level."""
     values = _finite_losses(losses)
+    confidence = _validate_probability(alpha, "alpha")
     if block_count is not None:
         if isinstance(block_count, bool) or int(block_count) != block_count:
             raise ValueError("block_count must be a positive integer.")
@@ -165,19 +172,34 @@ def apply_block_maxima(
         raise ValueError("The GEV fit returned invalid parameters.")
     if scale <= 0:
         raise ValueError("The GEV scale parameter must be positive.")
+
+    conventional_shape = float(-shape)  # SciPy uses -xi
+    if abs(conventional_shape) < 1e-8:  # Gumbel
+        return_level = float(
+            location - scale * np.log(-np.log(confidence))
+        )
+    else:   # Fisher
+        return_level = float(
+            location - scale / conventional_shape * (1 - (-np.log(confidence)) ** (-conventional_shape))
+        )
+    if not np.isfinite(return_level):
+        raise ValueError("The GEV fitted distribution returned an invalid return level.")
+
     return {
-        "shape": float(shape),
-        "loc": float(location),
-        "scale": float(scale),
+        "xi": conventional_shape,
+        "mu": float(location),
+        "sigma": float(scale),
         "block_size": float(size),
         "block_count": float(count),
+        "return_level": return_level,
+        "return_period": 1.0 / (1.0 - confidence),
     }
 
 
 def apply_pot_method(
     losses: Any, alpha: float, threshold: float | None = None, threshold_quantile: float | None = 0.90,
 ) -> dict[str, float]:
-    """Fit a GPD to threshold exceedances and calculate extreme VaR/CVaR."""
+    """Fit a GPD to threshold exceedances and calculate daily VaR and AVaR."""
     values = _finite_losses(losses)
     confidence = _validate_probability(alpha, "alpha")
 
@@ -222,7 +244,7 @@ def apply_pot_method(
     cvar = var + (scale + shape * (var - threshold_value)) / (1 - shape)
     return {
         "var": float(var),
-        "cvar": float(cvar),
+        "avar": float(cvar),
         "threshold": threshold_value,
         "threshold_quantile": threshold_level,
         "xi": shape,
@@ -268,4 +290,5 @@ def plot_tail_diagnostics(
     figure.tight_layout()
     figure.savefig(output_path, dpi=150)
     plt.close(figure)
+
     return str(output_path)
