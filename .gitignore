@@ -1,26 +1,23 @@
-# Claves y variables de entorno 
+# Keys and environment variables
 .env
 *.env
 
-# Entornos virtuales de Python 
+# Python virtual environments
 venv/
 .venv/
 env/
 ENV/
 
-# Caché de Python 
+# Python cache
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Datos temporales y gráficas generadas 
+# Temporary data and generated plots
 src/data/plot_temp.png 
 src/data/*.csv 
 
-# Archivos del sistema y de editores 
+# System and editor files
 .DS_Store
 .vscode/
 .idea/
-
-# Diseño inicial del chatbot
-diseño_chatbot.txt

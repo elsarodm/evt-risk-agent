@@ -5,7 +5,7 @@ Streamlit, LangGraph and OpenAI. It loads historical market prices, converts
 them into daily logarithmic losses and estimates tail risk using three
 Extreme Value Theory (EVT) approaches:
 
-- Historical or empirical VaR and CVaR
+- Historical or empirical daily VaR and AVaR
 - Block maxima with a generalized extreme value distribution
 - Peaks Over Threshold (POT) with a generalized Pareto distribution
 
@@ -18,7 +18,7 @@ English.
 - CSV upload with automatic date and price column detection
 - Conversational interface that keeps the latest 10 messages
 - Configurable confidence level from the sidebar
-- Empirical VaR and CVaR calculation
+- Empirical daily VaR and AVaR calculation
 - Block-maxima analysis with configurable block size or block count
 - POT threshold selection by quantile or absolute loss level
 - Optional POT tail-diagnostics plot
@@ -150,7 +150,7 @@ After uploading a CSV and selecting the confidence level in the sidebar,
 request an analysis in the chat. Example prompts include:
 
 ```text
-Calculate empirical VaR and CVaR at 99% confidence.
+Calculate empirical daily VaR and AVaR at 99% confidence.
 ```
 
 ```text
@@ -199,7 +199,7 @@ The historical method calculates quantiles directly from the loss
 distribution:
 
 - VaR is the loss at the configured confidence quantile.
-- CVaR is the average loss at or beyond that VaR threshold.
+- AVaR is the average daily loss at or beyond that VaR threshold.
 
 ### Peaks Over Threshold
 
@@ -209,7 +209,7 @@ The POT method:
    level.
 2. Calculates exceedances over that threshold.
 3. Fits a generalized Pareto distribution.
-4. Calculates extreme VaR and CVaR.
+4. Calculates extreme VaR and AVaR.
 
 The threshold must be strictly below the confidence level.
 
@@ -217,7 +217,16 @@ The threshold must be strictly below the confidence level.
 
 The block-maxima method divides the losses into non-overlapping blocks and
 fits a generalized extreme value distribution to the maximum loss in each
-block.
+block. It reports the GEV parameters (`xi`, `mu`, and `sigma`) and a return 
+level for the standard return period:
+
+```text
+k = 1 / (1 - alpha)
+```
+
+For example, `alpha=0.99` corresponds to a return period of 100 blocks. The
+return level is the expected maximum loss exceeded approximately once every
+`k` blocks.
 
 The user can specify either:
 
