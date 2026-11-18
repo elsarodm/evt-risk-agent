@@ -241,10 +241,10 @@ def apply_pot_method(
         var = threshold_value + scale * np.log(ratio)
     else:
         var = threshold_value + scale / shape * (ratio**shape - 1)
-    cvar = var + (scale + shape * (var - threshold_value)) / (1 - shape)
+    avar = var + (scale + shape * (var - threshold_value)) / (1 - shape)
     return {
         "var": float(var),
-        "avar": float(cvar),
+        "avar": float(avar),
         "threshold": threshold_value,
         "threshold_quantile": threshold_level,
         "xi": shape,
