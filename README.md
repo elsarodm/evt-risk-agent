@@ -9,8 +9,9 @@ Extreme Value Theory (EVT) approaches:
 - Block maxima with a generalized extreme value distribution
 - Peaks Over Threshold (POT) with a generalized Pareto distribution
 
-The application also uses a supervisor agent to interpret natural-language
-requests and a report agent to present the numerical results in Spanish or
+The agent is organized around a four-stage LangGraph workflow: it interprets
+natural-language requests, reuses or prepares the loss series, executes the
+selected risk method and presents the current numerical results in Spanish or
 English.
 
 ## Features
@@ -22,6 +23,7 @@ English.
 - Block-maxima analysis with configurable block size or block count
 - POT threshold selection by quantile or absolute loss level
 - Optional POT tail-diagnostics plot
+- Session-level reuse of losses calculated from the active CSV
 - Structured LLM output for model selection and parameter extraction
 - Temporary storage of uploaded files and generated plots
 
@@ -77,7 +79,7 @@ pip install -r requirements.txt
 
 ## Environment Configuration
 
-Create an `.env` file from the example:
+Create a `.env` file from the example:
 
 ```bash
 cp .env.example .env
@@ -189,7 +191,13 @@ The supervisor uses structured Pydantic output to select one of:
 - `block`
 
 The graph state retains the uploaded CSV path, the latest chat messages,
-processed losses, quantitative results and the generated plot path.
+processed losses, quantitative results and the generated plot path. It also
+retains `_cached_df_path` as the source associated with `_losses_cache`.
+
+The data agent avoids loading and transforming the CSV again while
+`df_path == _cached_df_path` and `_losses_cache` is available. Streamlit
+stores this cache and the uploaded-file hash in the browser session; uploading
+a different file invalidates the cache.
 
 ## Risk Methods
 
@@ -233,6 +241,19 @@ The user can specify either:
 - `block_size`, defaulting to 10 observations
 - `block_count`, which must be at least 3
 
+When `block_size` is requested, the implementation creates
+`N // block_size` blocks and distributes all `N` losses evenly across them,
+preserving observations that would otherwise remain at the end. When
+`block_count` is requested, all losses are distributed across exactly that
+number of blocks.
+
+Both modes use non-overlapping blocks whose sizes differ by at most one
+observation. `block_size` in the returned results reports the average block
+size. For example, 1304 losses divided into 60 blocks produce 44 blocks of 22
+losses and 16 blocks of 21 losses, with an average block size of 21.7333.
+A requested block size of 20 produces 65 blocks with an average size of
+20.0615 observations.
+
 ## Generated Files
 
 Uploaded CSV files are stored temporarily under `src/data/`.
@@ -272,5 +293,6 @@ enough extreme observations.
 
 ### The block-maxima fit fails
 
-Block maxima requires at least three complete blocks and at least two
-observations per block.
+Block maxima requires at least three blocks and at least two observations in
+each resulting block. It also requires a valid GEV fit with finite parameters
+and positive scale.
