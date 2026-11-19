@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -21,6 +22,12 @@ def _initialise_session() -> None:
         st.session_state.messages = []
     if "df_path" not in st.session_state:
         st.session_state.df_path = ""
+    if "_losses_cache" not in st.session_state:
+        st.session_state._losses_cache = None
+    if "_cached_df_path" not in st.session_state:
+        st.session_state._cached_df_path = ""
+    if "uploaded_hash" not in st.session_state:
+        st.session_state.uploaded_hash = ""
     if "raw_results" not in st.session_state:
         st.session_state.raw_results = {}
     if "plot_path" not in st.session_state:
@@ -66,6 +73,8 @@ def _state_from_session(prompt: str, confidence: float) -> AgentState:
         "df_path": st.session_state.df_path,
         "raw_results": st.session_state.raw_results,
         "plot_path": st.session_state.plot_path,
+        "_losses_cache": st.session_state._losses_cache,
+        "_cached_df_path": st.session_state._cached_df_path,
     }
 
 
@@ -127,6 +136,12 @@ def _run_agent(prompt: str, confidence: float) -> None:
         "raw_results", st.session_state.raw_results
     )
     st.session_state.plot_path = result.get("plot_path", st.session_state.plot_path)
+    st.session_state._losses_cache = result.get(
+        "_losses_cache", st.session_state._losses_cache
+    )
+    st.session_state._cached_df_path = result.get(
+        "_cached_df_path", st.session_state._cached_df_path
+    )
 
 
 def _render_message(message: dict[str, str]) -> None:
@@ -158,10 +173,14 @@ def main() -> None:
         )
 
         if uploaded_file is not None:
-            if uploaded_file.name != st.session_state.get("uploaded_name"):
+            uploaded_hash = sha256(uploaded_file.getbuffer()).hexdigest()
+            if uploaded_hash != st.session_state.uploaded_hash:
                 path = _save_uploaded_file(uploaded_file)
                 st.session_state.df_path = str(path)
                 st.session_state.uploaded_name = uploaded_file.name
+                st.session_state.uploaded_hash = uploaded_hash
+                st.session_state._losses_cache = None
+                st.session_state._cached_df_path = ""
                 st.success(f"File ready: {uploaded_file.name}")
             else:
                 st.success(f"File ready: {uploaded_file.name}")

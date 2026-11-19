@@ -26,6 +26,7 @@ class AgentState(TypedDict, total=False):
     _intent: str                    # Selected risk method
     _parameters: dict[str, Any]     # Parameters for the selected method
     _losses_cache: Any              # Processed loss vector
+    _cached_df_path: str            # Path to the CSV where _losses_cache is stored
 
 def _conversation_messages(state: AgentState) -> list[HumanMessage | AIMessage]:
     """Convert the stored chat history to LangChain messages."""
@@ -98,15 +99,22 @@ def _supervisor(state: AgentState) -> dict[str, Any]:
 
 def _data_agent(state: AgentState) -> dict[str, Any]:
     """Prepare the uploaded data and calculate the loss vector."""
-    csv_path = state.get("df_path", "")
-    if not csv_path:
+    cached_csv = state.get("_cached_df_path", "")
+    current_csv = state.get("df_path", "")
+    if not current_csv:
         raise ValueError("A historical CSV file is required before running an analysis.")
-    
-    df = tools.load_and_clean_csv(csv_path)
+
+    # If losses are already calculated from the current CSV
+    if state.get("_losses_cache") is not None and current_csv == cached_csv:
+        return {}
+
+    # If the current CSV is a new file
+    df = tools.load_and_clean_csv(current_csv)
     losses = tools.calculate_loss_vector(df)
     
     return {
         "_losses_cache": losses,
+        "_cached_df_path": current_csv,
     }
 
 
