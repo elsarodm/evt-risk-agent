@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -140,7 +141,7 @@ def apply_block_maxima(
     block_size: int | None = None,
     block_count: int | None = None,
     alpha: float = 0.99,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     """Fit a GEV distribution and calculate its standard return level."""
 
     values = _finite_losses(losses)
@@ -193,6 +194,7 @@ def apply_block_maxima(
         "xi": conventional_shape,
         "mu": float(location),
         "sigma": float(scale),
+        "block_maxima": maxima.tolist(),
         "block_size": float(size),
         "block_count": float(count),
         "return_level": return_level,
@@ -218,7 +220,7 @@ def apply_pot_method(
 
     else: 
         threshold_level = _validate_probability(threshold_quantile, "threshold_quantile")
-        threshold_value = float(np.quantile(losses, threshold_level))
+        threshold_value = float(np.quantile(values, threshold_level))
 
     if confidence <= threshold_level:
         raise ValueError(
@@ -279,7 +281,11 @@ def plot_tail_diagnostics(
         theoretical_x, c=shape, loc=0, scale=scale
     )
 
-    output_path = Path(__file__).resolve().parents[1] / "data" / "plot_temp.png"
+    output_path = (
+        Path(__file__).resolve().parents[1]
+        / "data"
+        / f"plot_pot_{uuid.uuid4().hex[:8]}.png"
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure, axis = plt.subplots(figsize=(8, 5))
     axis.step(excesses, empirical_survival, where="post", label="Empirical")
@@ -288,6 +294,70 @@ def plot_tail_diagnostics(
         title="POT tail diagnostics",
         xlabel="Excess over threshold",
         ylabel="Survival probability",
+    )
+    axis.grid(alpha=0.25)
+    axis.legend()
+    figure.tight_layout()
+    figure.savefig(output_path, dpi=150)
+    plt.close(figure)
+
+    return str(output_path)
+
+
+def plot_block_diagnostics(
+    losses: Any, block_maxima: Any, xi: float, mu: float, sigma: float
+) -> str:
+    """Save block maxima histogram with the fitted GEV density."""
+    _finite_losses(losses)  # Check that losses has at least 2 finite values
+    maxima = np.asarray(block_maxima, dtype=float).reshape(-1)
+    shape = float(xi)
+    location = float(mu)
+    scale = float(sigma)
+    if maxima.size < 2 or not np.all(np.isfinite(maxima)):
+        raise ValueError("block_maxima must contain at least two finite values.")
+    if not all(np.isfinite(parameter) for parameter in (shape, location, scale)):
+        raise ValueError("xi, mu, and sigma must be finite.")
+    if scale <= 0:
+        raise ValueError("sigma must be a positive finite value.")
+
+    maximum_min = float(maxima.min())
+    maximum_max = float(maxima.max())
+    margin = 0.10 * max(maximum_max - maximum_min, scale)
+    theoretical_x = np.linspace(
+        maximum_min - margin,
+        maximum_max + margin,
+        400,
+    )
+    theoretical_density = genextreme.pdf(
+        theoretical_x, c=-shape, loc=location, scale=scale
+    )
+    theoretical_density = np.nan_to_num(
+        theoretical_density, nan=0.0, posinf=0.0, neginf=0.0
+    )
+    theoretical_density = np.maximum(theoretical_density, 0.0)
+
+    output_path = (
+        Path(__file__).resolve().parents[1]
+        / "data"
+        / f"plot_block_{uuid.uuid4().hex[:8]}.png"
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    figure, axis = plt.subplots(figsize=(8, 5))
+    bin_count = min(15, max(5, int(np.ceil(np.sqrt(maxima.size)))))
+    axis.hist(
+        maxima,
+        bins=bin_count,
+        density=True,
+        alpha=0.75,
+        edgecolor="white",
+        linewidth=0.8,
+        label="Block maxima",
+    )
+    axis.plot(theoretical_x, theoretical_density, label="Fitted GEV")
+    axis.set(
+        title="Block maxima diagnostics",
+        xlabel="Block maximum",
+        ylabel="Density",
     )
     axis.grid(alpha=0.25)
     axis.legend()

@@ -8,6 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 import streamlit as st
+from openai import APIError
 
 from agent.graph import AgentState, build_graph
 
@@ -58,7 +59,11 @@ def _normalise_message(message: Any) -> dict[str, str] | None:
         role = "assistant"
     if role not in {"user", "assistant"} or not isinstance(content, str):
         return None
-    return {"role": role, "content": content}
+    normalised = {"role": role, "content": content}
+    plot_path = message.get("plot_path") if isinstance(message, dict) else None
+    if isinstance(plot_path, str) and plot_path:
+        normalised["plot_path"] = plot_path
+    return normalised
 
 
 def _state_from_session(prompt: str, confidence: float) -> AgentState:
@@ -111,6 +116,14 @@ def _run_agent(prompt: str, confidence: float) -> None:
             }
         )
         return
+    except APIError as error:
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": f"The OpenAI request failed: {error}",
+            }
+        )
+        return
     except (OSError, RuntimeError, TypeError, ValueError) as error:
         st.session_state.messages.append(
             {
@@ -135,7 +148,12 @@ def _run_agent(prompt: str, confidence: float) -> None:
     st.session_state.raw_results = result.get(
         "raw_results", st.session_state.raw_results
     )
-    st.session_state.plot_path = result.get("plot_path", st.session_state.plot_path)
+    st.session_state.plot_path = result.get("plot_path", "")
+    if st.session_state.plot_path:
+        for message in reversed(returned_messages):
+            if message["role"] == "assistant":
+                message["plot_path"] = st.session_state.plot_path
+                break
     st.session_state._losses_cache = result.get(
         "_losses_cache", st.session_state._losses_cache
     )
@@ -147,6 +165,18 @@ def _run_agent(prompt: str, confidence: float) -> None:
 def _render_message(message: dict[str, str]) -> None:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        plot_path_value = message.get("plot_path")
+        if plot_path_value:
+            plot_path = Path(plot_path_value)
+            if plot_path.is_file():
+                caption = (
+                    "Block-maxima diagnostic"
+                    if plot_path.name.startswith("plot_block_")
+                    else "POT tail diagnostic"
+                )
+                st.image(str(plot_path), caption=caption)
+            else:
+                st.warning(f"The saved plot was not found: {plot_path.name}")
 
 
 def main() -> None:
@@ -165,12 +195,13 @@ def main() -> None:
         )
         confidence = st.slider(
             "Confidence level",
-            min_value=0.9,
-            max_value=0.999,
-            value=0.99,
-            step=0.001,
-            format="%g%%",
+            min_value=90.0,
+            max_value=99.9,
+            value=99.0,
+            step=0.1,
+            format="%.1f%%",
         )
+        confidence /= 100
 
         if uploaded_file is not None:
             uploaded_hash = sha256(uploaded_file.getbuffer()).hexdigest()
@@ -197,13 +228,6 @@ def main() -> None:
     if prompt:
         _run_agent(prompt, confidence)
         st.rerun()
-
-    if st.session_state.plot_path:
-        plot_path = Path(st.session_state.plot_path)
-        if plot_path.is_file():
-            st.image(str(plot_path), caption="Tail diagnostic")
-        else:
-            st.warning("The agent reported a plot, but the file was not found.")
 
 
 if __name__ == "__main__":

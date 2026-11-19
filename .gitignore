@@ -14,7 +14,7 @@ __pycache__/
 *$py.class
 
 # Temporary data and generated plots
-src/data/plot_temp.png 
+src/data/*.png
 src/data/*.csv 
 
 # System and editor files

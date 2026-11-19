@@ -133,7 +133,7 @@ def _quantitative_agent(state: AgentState) -> dict[str, Any]:
     if intent == "pot": 
         alpha = params["alpha"] 
         threshold = params.get("threshold")
-        threshold_quant = min(params.get("threshold_quantile", 0.90), alpha * 0.95)
+        threshold_quant = params.get("threshold_quantile", 0.90)
         results = tools.apply_pot_method(
             losses,
             alpha=alpha,
@@ -163,6 +163,14 @@ def _quantitative_agent(state: AgentState) -> dict[str, Any]:
                 block_size=params.get("block_size", 10),
                 alpha=params["alpha"],
             )
+        if params.get("plot", False):
+            plot_path = tools.plot_block_diagnostics(
+                losses,
+                block_maxima=results["block_maxima"],
+                xi=results["xi"],
+                mu=results["mu"],
+                sigma=results["sigma"],
+            )
     
     else:  # empirical
         results = tools.calculate_empirical_risk(
@@ -177,8 +185,18 @@ def _quantitative_agent(state: AgentState) -> dict[str, Any]:
 
 def _report_agent(state: AgentState) -> dict[str, Any]:
     """Ask the LLM to write the business-facing report."""
+    latest_user_request = next(
+        (
+            message["content"]
+            for message in reversed(state.get("messages", []))
+            if message.get("role") in {"user", "human"}
+            and isinstance(message.get("content"), str)
+        ),
+        "",
+    )
     report_context = json.dumps(
         {
+            "user_request": latest_user_request,
             "method": state.get("_intent", "empirical"),
             "parameters": state.get("_parameters", {}),
             "results": state.get("raw_results", {}),

@@ -22,7 +22,8 @@ English.
 - Empirical daily VaR and AVaR calculation
 - Block-maxima analysis with configurable block size or block count
 - POT threshold selection by quantile or absolute loss level
-- Optional POT tail-diagnostics plot
+- Optional POT tail-diagnostics and block-maxima plots
+- Diagnostic plots are shown directly below the report that generated them
 - Session-level reuse of losses calculated from the active CSV
 - Structured LLM output for model selection and parameter extraction
 - Temporary storage of uploaded files and generated plots
@@ -193,6 +194,9 @@ The supervisor uses structured Pydantic output to select one of:
 The graph state retains the uploaded CSV path, the latest chat messages,
 processed losses, quantitative results and the generated plot path. It also
 retains `_cached_df_path` as the source associated with `_losses_cache`.
+When a plot is generated, the interface attaches it to the corresponding
+assistant report, so earlier plots remain above later reports in the chat
+history instead of being collected at the bottom of the page.
 
 The data agent avoids loading and transforming the CSV again while
 `df_path == _cached_df_path` and `_losses_cache` is available. Streamlit
@@ -220,6 +224,8 @@ The POT method:
 4. Calculates extreme VaR and AVaR.
 
 The threshold must be strictly below the confidence level.
+If a requested threshold quantile is equal to or above the confidence level,
+the request is rejected instead of being silently adjusted.
 
 ### Block Maxima
 
@@ -241,6 +247,9 @@ The user can specify either:
 - `block_size`, defaulting to 10 observations
 - `block_count`, which must be at least 3
 
+The returned results include `block_maxima`, a list containing the maximum loss
+for each block.
+
 When `block_size` is requested, the implementation creates
 `N // block_size` blocks and distributes all `N` losses evenly across them,
 preserving observations that would otherwise remain at the end. When
@@ -260,10 +269,16 @@ Uploaded CSV files are stored temporarily under `src/data/`.
 POT plots are generated at:
 
 ```text
-src/data/plot_temp.png
+src/data/plot_pot_<id>.png
 ```
 
-Files matching `src/data/*.csv` and `src/data/plot_temp.png` are ignored by
+Block-maxima plots are generated at:
+
+```text
+src/data/plot_block_<id>.png
+```
+
+Files matching `src/data/*.csv` and `src/data/*.png` are ignored by
 Git.
 
 ## Troubleshooting
