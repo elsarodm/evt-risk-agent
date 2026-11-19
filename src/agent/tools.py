@@ -142,20 +142,16 @@ def apply_block_maxima(
     alpha: float = 0.99,
 ) -> dict[str, float]:
     """Fit a GEV distribution and calculate its standard return level."""
+
     values = _finite_losses(losses)
     confidence = _validate_probability(alpha, "alpha")
+
     if block_count is not None:
         if isinstance(block_count, bool) or int(block_count) != block_count:
             raise ValueError("block_count must be a positive integer.")
         count = int(block_count)
         if count < 3:
             raise ValueError("block_count must be at least 3.")
-        size = values.size // count
-        if size < 2:
-            raise ValueError(
-                "The requested number of blocks requires at least two "
-                "observations per block."
-            )
     else:
         if block_size is None or isinstance(block_size, bool) or int(block_size) != block_size:
             raise ValueError("block_size must be a positive integer.")
@@ -166,7 +162,15 @@ def apply_block_maxima(
         if count < 3:
             raise ValueError("At least three complete blocks are required.")
 
-    maxima = values[: count * size].reshape(count, size).max(axis=1)
+    partition = np.array_split(values, count)
+    if any(block.size < 2 for block in partition):
+        raise ValueError(
+            "The requested block configuration requires at least two "
+            "observations per block."
+        )
+    size = float(values.size / count)
+    maxima = np.asarray([block.max() for block in partition])
+    
     shape, location, scale = genextreme.fit(maxima)
     if not all(np.isfinite(parameter) for parameter in (shape, location, scale)):
         raise ValueError("The GEV fit returned invalid parameters.")

@@ -42,7 +42,9 @@ missing results. For POT reports, include both VaR and AVaR when present.
 Do not translate VaR as "Variance" or use another unrelated label.
 For block maxima, report the fitted GEV parameters and block configuration;
 use block_size and block_count from the current numerical results, not from
-the requested parameters. Report xi, mu, sigma and the return level. Use the
+the requested parameters. block_size may be a decimal average when block_count
+was requested instead of block_size; in that case explain that the blocks are
+distributed as evenly as possible. Report xi, mu, sigma and the return level. Use the
 return period from the current results and explain that it is the expected
 maximum loss once every k blocks. Do not report VaR, AVaR or
 threshold_quantile for block maxima, and do not present previous
