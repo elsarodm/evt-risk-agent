@@ -39,6 +39,10 @@ evt-risk-agent/
 │   │   ├── prompts.py         # Supervisor and report prompts
 │   │   └── tools.py           # Data cleaning and risk calculations
 │   └── data/                  # Uploaded CSV files and generated plots
+├── tests/
+│   ├── __init__.py
+│   ├── test_tools.py          # Data preparation and statistical engine tests
+│   └── test_supervisor.py     # Supervisor and Pydantic contract tests
 ├── .env.example
 ├── requirements.txt
 └── README.md
@@ -112,6 +116,24 @@ streamlit run src/app.py
 
 Streamlit will usually open the application at
 `http://localhost:8501`.
+
+## Testing
+
+Run the automated tests from the repository root:
+
+```bash
+pytest -q
+```
+
+The test suite covers:
+
+- CSV cleaning, duplicate dates, invalid prices and logarithmic losses.
+- Empirical VaR and AVaR, including a known 95% quantile case.
+- POT threshold validation for quantiles and absolute thresholds.
+- Block-maxima partitioning, required output fields and SciPy's shape-sign
+  conversion (`xi = -shape`).
+- Structured supervisor output, Pydantic validation of probability ranges and
+  block parameters, and default values such as `block_size=10`.
 
 ## Input CSV Format
 
