@@ -133,7 +133,8 @@ The test suite covers:
 - Block-maxima partitioning, required output fields and SciPy's shape-sign
   conversion (`xi = -shape`).
 - Structured supervisor output, Pydantic validation of probability ranges and
-  block parameters, and default values such as `block_size=10`.
+  block parameters, finite positive absolute thresholds, and default values
+  such as `block_size=10`.
 
 ## Input CSV Format
 

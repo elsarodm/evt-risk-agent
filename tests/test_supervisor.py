@@ -46,6 +46,8 @@ def test_supervisor_returns_structured_decision(monkeypatch):
         ("block_size", 1),
         ("block_count", 2),
         ("threshold", 0.0),
+        ("threshold", float("nan")),
+        ("threshold", float("inf")),
     ],
 )
 def test_supervisor_decision_rejects_invalid_parameters(field, value):

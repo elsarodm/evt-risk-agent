@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from langgraph.graph import END, START, StateGraph
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, FiniteFloat
 
 from . import tools
 from .prompts import REPORT_AGENT_PROMPT, SUPERVISOR_PROMPT
@@ -56,7 +56,7 @@ class SupervisorDecision(BaseModel):
         default=0.90, gt=0, lt=1,
         description="POT threshold quantile as a decimal (0.90 by default)."
     )
-    threshold: float | None = Field(
+    threshold: FiniteFloat | None = Field(
         default=None, gt=0,
         description="POT threshold as an absolute decimal loss level if the user specifies a threshold."
     )
