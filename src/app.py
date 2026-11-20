@@ -29,6 +29,8 @@ def _initialise_session() -> None:
         st.session_state._cached_df_path = ""
     if "uploaded_hash" not in st.session_state:
         st.session_state.uploaded_hash = ""
+    if "uploaded_name" not in st.session_state:
+        st.session_state.uploaded_name = ""
     if "raw_results" not in st.session_state:
         st.session_state.raw_results = {}
     if "plot_path" not in st.session_state:
@@ -205,7 +207,10 @@ def main() -> None:
 
         if uploaded_file is not None:
             uploaded_hash = sha256(uploaded_file.getbuffer()).hexdigest()
-            if uploaded_hash != st.session_state.uploaded_hash:
+            if (
+                uploaded_hash != st.session_state.uploaded_hash
+                or uploaded_file.name != st.session_state.uploaded_name
+            ):
                 path = _save_uploaded_file(uploaded_file)
                 st.session_state.df_path = str(path)
                 st.session_state.uploaded_name = uploaded_file.name
